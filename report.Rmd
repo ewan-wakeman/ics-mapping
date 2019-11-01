@@ -1,12 +1,12 @@
 ---
 title: "Mapping Health Outcomes for Integrated Care System"
-output: html_notebook
+output: github_document
 ---
 
 # Introduction
 
 ```{r setup, warning = FALSE, message = FALSE}
-pk <- c('tidyverse', 'sf', 'ggrepel', 'fingertipsR', 'ggmap', 'cowplot')
+pk <- c('tidyverse', 'sf', 'fingertipsR', 'ggmap', 'cowplot')
 sapply(pk, function(x){
   if(!(x %in% installed.packages())){
     install.packages(x, character.only = TRUE)
