@@ -1,12 +1,12 @@
 ---
-title: "ICS testing"
+title: "Mapping Health Outcomes for Integrated Care System"
 output: html_notebook
 ---
 
 # Introduction
 
-```{r setup}
-pk <- c('tidyverse', 'sf', 'ggrepel', 'fingertipsR', 'ggmap')
+```{r setup, warning = FALSE}
+pk <- c('tidyverse', 'sf', 'ggrepel', 'fingertipsR', 'ggmap', 'cowplot')
 sapply(pk, function(x){
   if(!(x %in% installed.packages())){
     install.packages(x, character.only = TRUE)
@@ -58,7 +58,7 @@ eng_punch <-
 
 Lining things up neatly is always a plus. Using a fig aspect rtio of 1.2535 gets rid of the strips around the size for this projection.
 
-```{r basic_plot, fig.asp=1.2535, fig.width=3, out.width=3}
+```{r basic_plot, fig.height = 1.5, fig.asp=1.25}
 m <-
   ggplot(ics, aes(x = long, y = lat, label = str_wrap(stp19nm, 25), fill = st_areashape)) +
   geom_sf(size = .1, colour = colours[['dark']],  alpha = .5, fill = colours[['light']]) +
@@ -119,7 +119,7 @@ oa_lookup <-
   ungroup()
 ```
 
-```{r msoa_data, fig.height=6, fig.asp=1.3}
+```{r msoa_data}
 msoa_data <-
   data %>%
   as_tibble() %>%
@@ -158,12 +158,12 @@ msoa_data <-
   st_as_sf()
 
 # clean up
-need <- c('msoa_data', 'ics', 'eng_punch', 'theme_dark', 'theme_light', 'colours')
+need <- c('msoa_data', 'ics', 'eng', 'eng_punch', 'theme_dark', 'theme_light', 'colours')
 rmv <- c('rmv', ls()[!(ls() %in% need)])
 rm(list = rmv)
 ```
 
-```{r msoa_map, fig.height=6, fig.asp=1.3}
+```{r msoa_map, fig.height = 1.5, fig.asp=1.3}
 msoa_map <- 
   msoa_data %>% 
   filter(ind_name =="Healthy life expectancy, (upper age band 85+)") %>%
@@ -179,7 +179,7 @@ msoa_map <-
     subtitle = 'by ICS/MSOA',
     fill = 'Healthy life\nexpectancy (years)'
   ) +
-  theme_dark(base_size = 18) +
+  theme_dark(base_size = 12) +
   theme(
     legend.position = c(.2, .5),
     axis.text = element_blank(),
@@ -187,21 +187,20 @@ msoa_map <-
   )
 
 ggsave(plot = msoa_map, path = 'output/maps', filename = 'msoa_map.png', 
-       height = 9, width = 6.5, scale = 1.5, bg = colours[['dark']])
+       height = 3, width = 2.5, scale = 3, bg = colours[['dark']])
 
 msoa_map
 ```
 
-```{r boxplot, fig.height=6, fig.asp=1.5}
+```{r boxplot, fig.height=1.5, fig.asp=1.5}
 disp <-
   msoa_data %>%
   filter(ind_name =="Healthy life expectancy, (upper age band 85+)", is.finite(value)) %>%
   mutate(lab = if_else(value < 48, msoa_name, '')) %>%
   left_join(select(ics, stp19cd, long,lat) %>% as_tibble(), by = c('stp_code' = 'stp19cd')) %>%
   ggplot(aes(x = fct_reorder(stp_name, lat), y = value, label = lab)) +
-  geom_boxplot(fill = colours[['dark']], width = .4, colour = '#ffffff80', outlier.shape = NA) +
   geom_point(aes(colour = value), alpha = .3, size = 1) +
-  geom_text_repel (size = 1, colour = colours[['light']]) +
+  geom_boxplot(fill = 'transparent', width = .5, colour = '#ffffff80', outlier.shape = NA) +
   scale_colour_viridis_c(direction = -1, option = 'D') +
   coord_flip() +
   theme_dark() +
@@ -215,11 +214,10 @@ disp
 ```
 
 
-```{r map_and_box, fig.height = 6, fig.asp = .75, warning = FALSE}
-dual <-
-  cowplot::plot_grid(msoa_map, disp, ncol = 2)
+```{r map_and_box, fig.height = 1.5, fig.asp = .75, warning = FALSE}
+dual <- plot_grid(msoa_map, disp, ncol = 2, rel_widths = c(1.4,1))
 
-ggsave(plot = dual, path = 'output/maps', filename = 'map_boxplot.png', height = 10, width = 15, bg = colours[['dark']], dpi = 640)
+ggsave(plot = dual, path = 'output/maps', filename = 'map_boxplot.png', height = 3, width = 4, scale = 3, bg = colours[['dark']], dpi = 320)
 
 dual
 ```
@@ -228,7 +226,7 @@ dual
 
 To help with interpretation of the map, it would be convineint to know the names of the places which 
 
-```{r get_labels, fig.height = 8, fig.asp = 1.25}
+```{r get_labels, fig.height = 2, fig.asp = 1.25, message = FALSE}
 # fetch the tiles we need by using the eng object's bouding box with a small buffer.
 # zoom level of 9 worked pretty appropriately
 zl <- 8
@@ -285,7 +283,7 @@ I've gone with:
   4. *Add ICS boundaries and labels*
   To give the last bit of pertinent info about where ICS boundaries fall, layer on the ICS boundaries to as a thing outline with no fill. Drop labels in to display names. I've used a 20% alpha and a white fill to make the text stand out a little whilst trying not to lose too much detail out of the underlying map.
 
-```{r label_map, fig.height=6, fig.asp=1.3, message=FALSE}
+```{r label_map, fig.height=3, fig.asp=1.3, message=FALSE}
 lab_map <-
   # start with tiles
   ggmap(tiles) +
@@ -296,7 +294,7 @@ lab_map <-
   # add the msoa level data as before but with a lower alpha this time
   geom_sf(data = msoa_data_3857,
           aes(fill = value),
-          alpha = .5, colour = 'transparent', size = 0,
+          alpha = .65, colour = 'transparent', size = 0,
           inherit.aes = FALSE) +
   # # layer the ics outlines
   geom_sf(data = ics_3857,
@@ -312,7 +310,7 @@ lab_map <-
     subtitle = 'by ICS/MSOA',
     fill = 'Healthy life\nexpectancy (years)'
   ) +
-  theme_dark(base_size = 18) +
+  theme_dark(base_size = 12) +
   theme(
     legend.position = c(.2, .5),
     axis.text = element_blank(),
@@ -321,7 +319,7 @@ lab_map <-
 
 
 ggsave(plot = lab_map, path = 'output/maps', filename = 'lab_map.png', 
-       height = 9, width = 6.5, scale = 1.5, bg = colours[['dark']], dpi = 640)
+       height = 3, width = 2.5, scale = 3, bg = colours[['dark']], dpi = 640)
 
 lab_map
 ```
@@ -329,11 +327,10 @@ lab_map
 
 Putting this newly labelled map together with our boxplots again gives a good overall picture of what's happening.
 
-```{r labelled_map_and_boxplot, fig.height=6, fig.asp=.75}
-lab_map_box <-
-  cowplot::plot_grid(lab_map, disp, ncol = 2)
+```{r labelled_map_and_boxplot, fig.height=3, fig.asp=.75, warning = FALSE}
+lab_map_box <- plot_grid(lab_map, disp, ncol = 2, rel_widths = c(1.4, 1))
 
-ggsave(plot = lab_map_box, path = 'output', filename = 'labmap_box.png', height = 10, width = 15, bg = colours[['dark']], dpi = 640)
+ggsave(plot = lab_map_box, path = 'output', filename = 'labmap_box.png', height = 3, width = 4, scale = 3, bg = colours[['dark']], dpi = 320)
 
 lab_map_box
 ```
