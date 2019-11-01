@@ -5,7 +5,7 @@ output: html_notebook
 
 # Introduction
 
-```{r setup, warning = FALSE}
+```{r setup, warning = FALSE, message = FALSE}
 pk <- c('tidyverse', 'sf', 'ggrepel', 'fingertipsR', 'ggmap', 'cowplot')
 sapply(pk, function(x){
   if(!(x %in% installed.packages())){
