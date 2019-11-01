@@ -9,4 +9,4 @@ This repository contains all the code needed to access maps using the fingertips
   - fingertipsR
 
 ## Final Image
-![ics_map][output/labmap_box.png]
+![ics_map](output/labmap_box.png)
