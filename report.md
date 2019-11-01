@@ -1,9 +1,10 @@
 Mapping Health Outcomes for Integrated Care System
 ================
 
-# Introduction
+# Setup
 
 ``` r
+# Load packages
 pk <- c('tidyverse', 'sf', 'fingertipsR', 'ggmap', 'cowplot')
 sapply(pk, function(x){
   if(!(x %in% installed.packages())){
@@ -17,6 +18,7 @@ sapply(pk, function(x){
     ##        TRUE        TRUE        TRUE        TRUE        TRUE
 
 ``` r
+# run all the scripts in the 'etc' folder (this contains the script for creating themes)
 list.files('etc', full.names = TRUE, pattern = '.r') %>%
   map(source)
 ```
@@ -37,8 +39,11 @@ list.files('etc', full.names = TRUE, pattern = '.r') %>%
     ## [1] FALSE
 
 ``` r
+# create a folder to store the geojson files for making maps
+# this saves downloading them every time
 if(!dir.exists('map_json')){dir.create('map_json')}
 
+# define a small function to check for a geojson file and download it if we don't have it locally yet
 load_sf <- function(u, path, file){
   fp <- paste0(path, '/', file, '.geojson')
   if(!file.exists(fp)){
@@ -46,7 +51,8 @@ load_sf <- function(u, path, file){
   }
   read_sf(fp)
 }
-  
+
+# (download if needed and ) load the ics geojson file as an sf object
 ics <- 'https://opendata.arcgis.com/datasets/1a3b3e9f044a44a895d64000cddf9272_0.geojson' %>%
   load_sf(path = 'map_json', file = 'ics') %>%
   mutate(
@@ -58,19 +64,16 @@ ics <- 'https://opendata.arcgis.com/datasets/1a3b3e9f044a44a895d64000cddf9272_0.
       str_replace_all(c('And'='and', 'The' = 'the', 'Of' = 'of'))
   )
 
-'https://opendata.arcgis.com/datasets/c661a8377e2647b0bae68c4911df868b_3.geojson'
-```
-
-    ## [1] "https://opendata.arcgis.com/datasets/c661a8377e2647b0bae68c4911df868b_3.geojson"
-
-``` r
+# do the same with msoas
 msoa <- 'https://opendata.arcgis.com/datasets/c661a8377e2647b0bae68c4911df868b_3.geojson' %>%
   load_sf(path = 'map_json', file = 'msoa')
 
+# and one for england as a county
 eng <- 'https://opendata.arcgis.com/datasets/629c303e07ee4ad09a4dfd0bfea499ec_0.geojson' %>%
   load_sf(path = 'map_json', file = 'countries') %>% 
   filter(ctry18nm == 'England')
 
+# create an inverse of the england map (essentially a square with an england shaped hole!)
 eng_punch <-
   eng %>%
   st_buffer(dist = .2) %>%
@@ -81,10 +84,10 @@ eng_punch <-
 
 # Plotting ICSs
 
-Lining things up neatly is always a plus. Using a fig aspect rtio of
-1.2535 gets rid of the strips around the size for this projection.
+Let’s start by plotting a basic ICS map to get started.
 
 ``` r
+# create the map
 m <-
   ggplot(ics, aes(x = long, y = lat, label = str_wrap(stp19nm, 25), fill = st_areashape)) +
   geom_sf(size = .1, colour = colours[['dark']],  alpha = .5, fill = colours[['light']]) +
@@ -99,9 +102,11 @@ m <-
     axis.title = element_blank()
   )
 
+# create an output directory with a mps directory in it and save a copy of the image
 if(!dir.exists('output/maps')){dir.create('output/maps', recursive = TRUE)}
 ggsave(plot = m, path = 'output/maps', filename = 'simple_ics.png', height = 8, width = 8/1.25, bg = '#222629')
 
+# display the image
 m
 ```
 
@@ -118,9 +123,10 @@ data and write it locally but should speed up after the downloads from
 PHE are done.
 
 ``` r
+# create a directory to hold the raw data
 if(!dir.exists('data')){dir.create('data')}
 
-# get fingertips data
+# if fingertips data hasn't been downloaded yet then download it and write it to data
 if(!file.exists('data/fingertips_data.csv')){
   fingertipsR::indicators() %>%
   filter(str_detect(tolower(IndicatorName), 'healthy life exp|mortality')) %>%
@@ -130,18 +136,19 @@ if(!file.exists('data/fingertips_data.csv')){
   write.csv('data/fingertips_data.csv', na = '')
 }
 
-# get lsoa lookup
+# same for an lsoa to stp lookup table
 if(!file.exists('data/lsoa_stp.csv')){
   'https://opendata.arcgis.com/datasets/520e9cd294c84dfaaf97cc91494237ac_0.csv' %>%
     download.file('data/lsoa_stp.csv', mode = 'w')
 }
 
-# get oa lookup
+# get oa lookup and then for an oa to lsoa to msoa lookup
 if(!file.exists('data/oa_lookup.csv')){
   'http://geoportal1-ons.opendata.arcgis.com/datasets/fe6c55f0924b4734adf1cf7104a0173e_0.csv' %>%
     download.file('data/oa_lookup.csv', mode = 'w')
 }
 
+# read the files and create a dataframe 'oa_lookup' with lsoa to msoa in it
 data <- read_csv('data/fingertips_data.csv')
 lsoa_stp <-read_csv('data/lsoa_stp.csv')
 oa_lookup <-
@@ -155,6 +162,7 @@ oa_lookup <-
 ```
 
 ``` r
+# join together the fingertips data with the lookup showing ICS/STP name and the msoa map boundaries
 msoa_data <-
   data %>%
   as_tibble() %>%
@@ -199,35 +207,48 @@ rm(list = rmv)
 ```
 
 ``` r
+# plot the msoa data
 msoa_map <- 
   msoa_data %>% 
+  # filter to just Healthy Life Expectancy
   filter(ind_name =="Healthy life expectancy, (upper age band 85+)") %>%
+  # add the data as filled polygons using hle value for fill colour
   ggplot(aes(fill = value)) +
   geom_sf(colour = 'transparent', size = 0, alpha =.7) +
+  # overlay the ics/stp boundaries
   geom_sf(data = ics, colour = colours[['light']], size = .25, fill = 'transparent', inherit.aes = FALSE) +
+  # add text labels for the ics/stp
   geom_text(data = ics, 
             aes(x = long, y = lat, label = stp_name %>% str_wrap(25)), 
             size = 1.5, colour = colours[['light']], inherit.aes = FALSE) + 
+  # use a virisdis colour palette for fill
   scale_fill_viridis_c(option = 'D', direction = -1) +
   labs(
     title = "Healthy life expectancy, (upper age band 85+)",
     subtitle = 'by ICS/MSOA',
     fill = 'Healthy life\nexpectancy (years)'
   ) +
+  # theme to deal with font, background etc…
   theme_dark(base_size = 12) +
+  # modify legend position and turn off axes
   theme(
     legend.position = c(.2, .5),
     axis.text = element_blank(),
     axis.title = element_blank()
   )
 
+# save it
 ggsave(plot = msoa_map, path = 'output/maps', filename = 'msoa_map.png', 
        height = 3, width = 2.5, scale = 3, bg = colours[['dark']])
 
+# show it inline
 msoa_map
 ```
 
 ![](report_files/figure-gfm/msoa_map-1.png)<!-- -->
+
+Create a box and whisker plot for each MSOA within an ICS/STP to show
+the distirbution of MSOAs along this measure.
 
 ``` r
 disp <-
@@ -252,6 +273,8 @@ disp
 
 ![](report_files/figure-gfm/boxplot-1.png)<!-- -->
 
+Plot the map and boxplot together.
+
 ``` r
 dual <- plot_grid(msoa_map, disp, ncol = 2, rel_widths = c(1.4,1))
 
@@ -264,13 +287,14 @@ dual
 
 # Plotting with labels
 
-To help with interpretation of the map, it would be convineint to know
-the names of the places
-which
+To help with interpretation it’d be convenient to be able to see key
+places labelled on the map. In order to do that we need to get some map
+tiles. I’m using stamen maps because they have a decent *labels only*
+map.
 
 ``` r
 # fetch the tiles we need by using the eng object's bouding box with a small buffer.
-# zoom level of 9 worked pretty appropriately
+# zoom level of 8 worked pretty appropriately
 zl <- 8
 
 tiles <- 
@@ -279,12 +303,7 @@ tiles <-
   st_bbox() %>%
   as.vector() %>%
   get_stamenmap(zoom = zl, maptype = 'toner-labels')
-```
 
-    ## Warning in st_buffer.sfc(st_geometry(x), dist, nQuadSegs, endCapStyle =
-    ## endCapStyle, : st_buffer does not correctly buffer longitude/latitude data
-
-``` r
 ggmap(tiles)
 ```
 
@@ -301,7 +320,7 @@ it](https://github.com/dkahle/ggmap/issues/160 "github issue") better
 than I ever could. If we transform the SimpleFeatures we made previously
 to 3857 and then overlay them on the ggmap we can get some labels.
 
-*NB:* There’s also an issue with the topology in the STP geojson file
+**NB:** There’s also an issue with the topology in the STP geojson file
 from the ONS which causes sf to throw an error saying points intersect
 when plotting. This is probably as a result of me getting the most
 generalised boundaries availiable to make things quicker. You can get
@@ -338,25 +357,39 @@ Once we’ve messed about with CRS and forced everything into the new
 EPSG:3857 world we can put it all together\! Order is important here as
 we’re essentailly layering the map up bit by bit.
 
-I’ve gone with: 1. *Load the base map* This is the ggmap which has our
-stamen map labels which are essentially the background for everything
-else which sits on top. I’ve immediately followed this with set
-coordinates manually to a CRS of 3857, otherwise when we start plotting
-more things it’s going to try and use 4326 again. 2. *Add a mask for
-England* Slap on the ‘eng\_punch’ object we created earlier to mask any
-bits of the stamen tiles outside of england giving a nice crisp edge.
-I’ve set this to be the same fill as the overall plot and an opacity
-of 100% (default). This takes out labels from Scotland, Wales, Northern
-Ireland and ROI which would otherwise just be floating in the distance.
-Sadly this does have the effect of clipping the edges of any labels that
-cross the coastline, but que sera sera… 3. *Layer the MSOA data* Here’s
-the fun bit, the filled geoms we made earlier now sit on top with an
-alpha of 50% to allow the base map labels to still be visible beneath.
-4. *Add ICS boundaries and labels* To give the last bit of pertinent
-info about where ICS boundaries fall, layer on the ICS boundaries to as
-a thing outline with no fill. Drop labels in to display names. I’ve used
-a 20% alpha and a white fill to make the text stand out a little whilst
-trying not to lose too much detail out of the underlying map.
+I’ve gone with: 1. *Load the base map*
+
+This is the ggmap which has our stamen map labels which are essentially
+the background for everything else which sits on top. I’ve immediately
+followed this with set coordinates manually to a CRS of 3857, otherwise
+when we start plotting more things it’s going to try and use 4326 again.
+
+2.  *Add a mask for England*
+    
+    Slap on the ‘eng\_punch’ object we created earlier to mask any bits
+    of the stamen tiles outside of england giving a nice crisp edge.
+    I’ve set this to be the same fill as the overall plot and an
+    opacity of 100% (default). This takes out labels from Scotland,
+    Wales, Northern Ireland and ROI which would otherwise just be
+    floating in the distance. Sadly this does have the effect of
+    clipping the edges of any labels that cross the coastline, but que
+    sera sera…
+
+3.  *Layer the MSOA data*
+    
+    Here’s the fun bit, the filled geoms we made earlier now sit on top
+    with an alpha of 50% to allow the base map labels to still be
+    visible beneath.
+
+4.  *Add ICS boundaries and labels*
+    
+    To give the last bit of pertinent info about where ICS boundaries
+    fall, layer on the ICS boundaries to as a thing outline with no
+    fill. Drop labels in to display names. I’ve used a 20% alpha and a
+    white fill to make the text stand out a little whilst trying not to
+    lose too much detail out of the underlying map.
+
+<!-- end list -->
 
 ``` r
 lab_map <-
