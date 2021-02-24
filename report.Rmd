@@ -368,3 +368,94 @@ ggsave(plot = lab_map_box, path = 'output', filename = 'labmap_box.png', height 
 
 lab_map_box
 ```
+
+# Creating maps for individual ICSs/STPs
+
+```{r ics_level_maps}
+si <- ics_3857[28,]
+zl <- 8
+box <-
+  si %>%
+  st_bbox()
+
+max_dist <- c(y = box[['ymax']] - box[['ymin']],
+              x = box[['xmax']] - box[['xmin']]) %>%
+  reduce(max) %>%
+  sum(10000)
+
+sq <- st_make_grid(st_centroid(si), n = 1, cellsize = max_dist, offset = c(st_bbox(st_centroid(si))[['xmin']] - (max_dist/2),
+                                                                           st_bbox(st_centroid(si))[['ymin']] - (max_dist/2)))
+
+req <-
+  st_intersection(msoa_data_3857, sq)
+
+mask <-
+  st_difference(sq, si) %>%
+  st_difference(eng_punch_3857)
+
+t <-
+  ics[28,] %>%
+  st_bbox() %>%
+  as.vector() %>%
+  get_stamenmap(zoom = 9, maptype = 'toner-labels')
+
+ggplot(req, aes(fill = value)) +
+  geom_sf(colour = 'transparent', size = 0) +
+  geom_sf(data = mask, colour = colours[['coral']], fill = '#FFFFFF80') +
+  geom_map(data = t, aes(map_id = id))
+```
+
+```{r individual_ics_maps, fig.asp=1, fig.height = 1, warning = FALSE}
+if(!dir.exists('output/maps/ics')){dir.create('output/maps/ics')}
+ics_map_list <- list()
+hle_msoa <-
+  msoa_data_3857 %>%
+  filter(ind_name == 'Healthy life expectancy, (upper age band 85+)') %>%
+  st_as_sf()
+
+range <- c(min(hle_msoa$value, na.rm = TRUE),
+           max(hle_msoa$value, na.rm = TRUE))
+  
+for(i in seq_along(ics_3857$objectid)){
+  d <- ics_3857[i,] %>%
+    st_as_sf()
+  b <-
+    d %>%
+    st_bbox()
+  md <- c(y = b[['ymax']] - b[['ymin']],
+          x = b[['xmax']] - b[['xmin']]) %>%
+    reduce(max) %>%
+    sum(10000)
+  
+  sq <- 
+    st_centroid(d) %>%
+    st_make_grid(., n = 1, cellsize = md, 
+                     offset = c(st_bbox(.)[['xmin']] - (md/2),
+                                st_bbox(.)[['ymin']] - (md/2))
+    )
+  r <-
+    st_intersection(hle_msoa, sq)
+  m <-
+    st_difference(sq,d) %>%
+    st_difference(eng_punch_3857)
+  p <-
+    ggplot() +
+    geom_sf(data = r, aes(fill = value), size = 0, inherit.aes = FALSE) +
+    geom_sf(data = m, fill = '#ffffff70', size = 0, inherit.aes = FALSE) +
+    scale_fill_viridis_c(direction = -1, limits = range) +
+    labs(
+      title = d$stp_name,
+      fill = 'Healthy life\nexpectancy'
+    ) +
+    theme_dark(base_size = 14) +
+    theme(
+      axis.text = element_blank(),
+      legend.position = 'right',
+      panel.background = element_rect(fill = colours[['dark']], colour = 'transparent', size = 0 )
+    )
+  ggsave(p, path = 'output/maps/ics', filename = paste0(d$stp_name, '.png'), 
+         width = 4, height = 4, scale = 2, dpi = 320, bg = colours[['dark']])
+  ics_map_list[[i]] <- p
+}
+
+```
