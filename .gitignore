@@ -36,7 +36,7 @@ vignettes/*.pdf
 rsconnect/
 
 *.icloud
-output/maps/*
+output/maps/ics*
 map_json/*
 *.Rproj
 .DS_Store
